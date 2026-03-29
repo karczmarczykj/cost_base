@@ -28,6 +28,14 @@ function fmtInt(value: Fraction): string {
 }
 
 /**
+ * Extract tax year from a date in DD.MM.YY format.
+ */
+function extractYear(dateDdMmYy: string): number {
+  const parts = dateDdMmYy.split('.');
+  return 2000 + parseInt(parts[2], 10);
+}
+
+/**
  * Classify gain/loss for CSS: returns 'cell-gain', 'cell-loss', or ''.
  */
 function gainClass(value: Fraction): string {
@@ -87,7 +95,7 @@ export function renderResults(container: HTMLElement, rawTransactions: RawTransa
         case 'Sell':
           engine.addWithdrawal(
             tx.fundName, tx.register, tx.amount, tx.commission,
-            tx.units, tx.currencyConversionRate, tx.transactionNumber,
+            tx.units, tx.currencyConversionRate, tx.transactionNumber, tx.date,
           );
           break;
 
@@ -109,109 +117,134 @@ export function renderResults(container: HTMLElement, rawTransactions: RawTransa
     const closedTx = engine.closedTransactions;
     const remainingFunds = engine.remainingFunds;
 
-    // ---- Totals for summary cards ----
-    let totalCostPln    = new Fraction(0);
-    let totalPaymentPln = new Fraction(0);
+    // ---- Group closed transactions by tax year ----
+    const byYear = new Map<number, typeof closedTx>();
 
-    for (const entry of closedTx.values()) {
-      totalCostPln    = totalCostPln.add(entry.value.costPln);
-      totalPaymentPln = totalPaymentPln.add(entry.value.paymentPln);
+    for (const [mapKey, entry] of closedTx) {
+      const year = extractYear(entry.key.closeDate);
+      let yearMap = byYear.get(year);
+      if (!yearMap) {
+        yearMap = new Map();
+        byYear.set(year, yearMap);
+      }
+      yearMap.set(mapKey, entry);
     }
 
-    const totalGainPln = totalPaymentPln.sub(totalCostPln);
-    const gainCmp      = totalGainPln.compare(0);
-    const gainCardClass = gainCmp > 0 ? 'gain' : gainCmp < 0 ? 'loss' : '';
+    // Sort years descending (newest first)
+    const sortedYears = [...byYear.keys()].sort((a, b) => b - a);
 
-    // ---- Summary cards ----
-    let html = `
-      <div class="summary-cards">
-        <div class="summary-card ${gainCardClass}">
-          <div class="card-title">Zysk / Strata</div>
-          <div class="card-value">${gainCmp >= 0 ? '+' : ''}${fmt(totalGainPln)} PLN</div>
-        </div>
-        <div class="summary-card">
-          <div class="card-title">Przychod PLN</div>
-          <div class="card-value">${fmt(totalPaymentPln)} PLN</div>
-        </div>
-        <div class="summary-card">
-          <div class="card-title">Koszty PLN</div>
-          <div class="card-value">${fmt(totalCostPln)} PLN</div>
-        </div>
-      </div>
-    `;
-
-    // ---- Closed transactions table ----
-    html += `<div class="card">`;
-    html += `<h2>Zamkniete transakcje</h2>`;
+    let html = '';
 
     if (closedTx.size === 0) {
+      html += `<div class="card">`;
+      html += `<h2>Zamkniete transakcje</h2>`;
       html += `<div class="empty-state">Brak zamknietych transakcji.</div>`;
+      html += `</div>`;
     } else {
-      html += `<div class="table-wrapper">`;
-      html += `<table class="data-table" role="grid">`;
-      html += `<thead><tr>
-        <th>Fundusz</th>
-        <th>Rejestr</th>
-        <th>Transakcja</th>
-        <th class="numeric">Koszt USD</th>
-        <th class="numeric">Koszt PLN</th>
-        <th class="numeric">Przychod USD</th>
-        <th class="numeric">Przychod PLN</th>
-        <th class="numeric">Jednostki</th>
-        <th class="numeric">Zysk / Strata PLN</th>
-      </tr></thead><tbody>`;
+      for (const year of sortedYears) {
+        const yearTx = byYear.get(year)!;
 
-      for (const entry of closedTx.values()) {
-        const v = entry.value;
-        const gainPln  = v.paymentPln.sub(v.costPln);
-        const cls      = gainClass(gainPln);
-        const rowClass = gainPln.compare(0) > 0 ? 'row-gain' : gainPln.compare(0) < 0 ? 'row-loss' : '';
+        // Compute year totals
+        let yearCostPln    = new Fraction(0);
+        let yearPaymentPln = new Fraction(0);
 
-        html += `<tr class="${rowClass}">`;
-        html += `<td><span class="fund-name" title="${entry.key.fundName}">${entry.key.fundName}</span></td>`;
-        html += `<td class="text-secondary text-mono">${entry.key.register}</td>`;
-        html += `<td class="text-secondary text-mono">${entry.key.transaction}</td>`;
-        html += `<td class="numeric">${fmt(v.costUsd)}</td>`;
-        html += `<td class="numeric">${fmt(v.costPln)}</td>`;
-        html += `<td class="numeric">${fmt(v.paymentUsd)}</td>`;
-        html += `<td class="numeric">${fmt(v.paymentPln)}</td>`;
-        html += `<td class="numeric">${fmt4(v.units)}</td>`;
-        html += `<td class="numeric ${cls}">${gainPln.compare(0) >= 0 ? '+' : ''}${fmt(gainPln)}</td>`;
-        html += `</tr>`;
+        for (const entry of yearTx.values()) {
+          yearCostPln    = yearCostPln.add(entry.value.costPln);
+          yearPaymentPln = yearPaymentPln.add(entry.value.paymentPln);
+        }
+
+        const yearGainPln    = yearPaymentPln.sub(yearCostPln);
+        const yearGainCmp    = yearGainPln.compare(0);
+        const yearGainClass  = yearGainCmp > 0 ? 'gain' : yearGainCmp < 0 ? 'loss' : '';
+
+        // Summary cards for this year
+        html += `
+          <div class="summary-cards">
+            <div class="summary-card ${yearGainClass}">
+              <div class="card-title">Zysk / Strata ${year}</div>
+              <div class="card-value">${yearGainCmp >= 0 ? '+' : ''}${fmt(yearGainPln)} PLN</div>
+            </div>
+            <div class="summary-card">
+              <div class="card-title">Przychod PLN ${year}</div>
+              <div class="card-value">${fmt(yearPaymentPln)} PLN</div>
+            </div>
+            <div class="summary-card">
+              <div class="card-title">Koszty PLN ${year}</div>
+              <div class="card-value">${fmt(yearCostPln)} PLN</div>
+            </div>
+          </div>
+        `;
+
+        // Closed transactions table for this year
+        html += `<div class="card">`;
+        html += `<h2>Zamkniete transakcje — rok podatkowy ${year}</h2>`;
+
+        html += `<div class="table-wrapper">`;
+        html += `<table class="data-table" role="grid">`;
+        html += `<thead><tr>
+          <th>Fundusz</th>
+          <th>Rejestr</th>
+          <th>Transakcja</th>
+          <th class="numeric">Koszt USD</th>
+          <th class="numeric">Koszt PLN</th>
+          <th class="numeric">Przychod USD</th>
+          <th class="numeric">Przychod PLN</th>
+          <th class="numeric">Jednostki</th>
+          <th class="numeric">Zysk / Strata PLN</th>
+        </tr></thead><tbody>`;
+
+        for (const entry of yearTx.values()) {
+          const v = entry.value;
+          const gainPln  = v.paymentPln.sub(v.costPln);
+          const cls      = gainClass(gainPln);
+          const rowClass = gainPln.compare(0) > 0 ? 'row-gain' : gainPln.compare(0) < 0 ? 'row-loss' : '';
+
+          html += `<tr class="${rowClass}">`;
+          html += `<td><span class="fund-name" title="${entry.key.fundName}">${entry.key.fundName}</span></td>`;
+          html += `<td class="text-secondary text-mono">${entry.key.register}</td>`;
+          html += `<td class="text-secondary text-mono">${entry.key.transaction}</td>`;
+          html += `<td class="numeric">${fmt(v.costUsd)}</td>`;
+          html += `<td class="numeric">${fmt(v.costPln)}</td>`;
+          html += `<td class="numeric">${fmt(v.paymentUsd)}</td>`;
+          html += `<td class="numeric">${fmt(v.paymentPln)}</td>`;
+          html += `<td class="numeric">${fmt4(v.units)}</td>`;
+          html += `<td class="numeric ${cls}">${gainPln.compare(0) >= 0 ? '+' : ''}${fmt(gainPln)}</td>`;
+          html += `</tr>`;
+        }
+
+        html += `</tbody><tfoot><tr>`;
+        html += `<td colspan="4"><strong>RAZEM</strong></td>`;
+        html += `<td class="numeric"><strong>${fmt(yearCostPln)}</strong></td>`;
+        html += `<td></td>`;
+        html += `<td class="numeric"><strong>${fmt(yearPaymentPln)}</strong></td>`;
+        html += `<td></td>`;
+        html += `<td class="numeric ${gainClass(yearGainPln)}">
+                   <strong>${yearGainPln.compare(0) >= 0 ? '+' : ''}${fmt(yearGainPln)}</strong>
+                 </td>`;
+        html += `</tr></tfoot></table></div>`;
+
+        // Tax card for this year
+        const taxBase = Math.round(yearGainPln.valueOf());
+        const taxAmount = yearGainCmp > 0 ? Math.round(taxBase * 0.19) : 0;
+
+        html += `<div class="tax-card" style="margin-top:1rem">
+          <div class="tax-card-main">
+            <span class="tax-card-label">Podatek 19% (${year})</span>
+            <span class="tax-card-amount">${taxAmount.toLocaleString('pl-PL')} PLN</span>
+          </div>
+          <div class="tax-card-sub">
+            podstawa: <span>${fmtInt(yearGainPln)} PLN</span>
+          </div>
+          <div class="tax-card-sub">
+            przychod: <span>${fmt(yearPaymentPln)} PLN</span>
+            &nbsp;&nbsp;koszty: <span>${fmt(yearCostPln)} PLN</span>
+          </div>
+          ${yearGainCmp <= 0 ? '<div class="tax-card-sub text-muted">Strata — podatek nie wystepuje</div>' : ''}
+        </div>`;
+
+        html += `</div>`; // end .card for this year
       }
-
-      html += `</tbody><tfoot><tr>`;
-      html += `<td colspan="4"><strong>RAZEM</strong></td>`;
-      html += `<td class="numeric"><strong>${fmt(totalCostPln)}</strong></td>`;
-      html += `<td></td>`;
-      html += `<td class="numeric"><strong>${fmt(totalPaymentPln)}</strong></td>`;
-      html += `<td></td>`;
-      html += `<td class="numeric ${gainClass(totalGainPln)}">
-                 <strong>${totalGainPln.compare(0) >= 0 ? '+' : ''}${fmt(totalGainPln)}</strong>
-               </td>`;
-      html += `</tr></tfoot></table></div>`;
-
-      // ---- Tax card ----
-      const taxBase = Math.round(totalGainPln.valueOf());
-      const taxAmount = gainCmp > 0 ? Math.round(taxBase * 0.19) : 0;
-
-      html += `<div class="tax-card" style="margin-top:1rem">
-        <div class="tax-card-main">
-          <span class="tax-card-label">Podatek 19%</span>
-          <span class="tax-card-amount">${taxAmount.toLocaleString('pl-PL')} PLN</span>
-        </div>
-        <div class="tax-card-sub">
-          podstawa: <span>${fmtInt(totalGainPln)} PLN</span>
-        </div>
-        <div class="tax-card-sub">
-          przychod: <span>${fmt(totalPaymentPln)} PLN</span>
-          &nbsp;&nbsp;koszty: <span>${fmt(totalCostPln)} PLN</span>
-        </div>
-        ${gainCmp <= 0 ? '<div class="tax-card-sub text-muted">Strata — podatek nie wystepuje</div>' : ''}
-      </div>`;
     }
-
-    html += `</div>`; // end .card (closed)
 
     // ---- Remaining funds table ----
     html += `<div class="card">`;

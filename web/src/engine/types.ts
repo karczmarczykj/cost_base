@@ -55,6 +55,7 @@ export interface ClosedTransactionKey {
   readonly fundName: string;
   readonly register: string;
   readonly transaction: string;
+  readonly closeDate: string;
 }
 
 /**

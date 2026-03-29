@@ -20,6 +20,7 @@ export class PaymentUnit {
   // Set only when closed
   private _redemptionPayment: Fraction | null = null;
   private _redemptionCurrencyConversionRate: Fraction | null = null;
+  private _closeDate: string | null = null;
 
   constructor(
     fundName: string,
@@ -54,6 +55,9 @@ export class PaymentUnit {
       this._buyCurrencyConversionRate,
       this._transaction,
     );
+    if (this._closeDate) {
+      scaled._closeDate = this._closeDate;
+    }
     return scaled;
   }
 
@@ -82,10 +86,11 @@ export class PaymentUnit {
   /**
    * Close (sell) this unit, recording the redemption payment and exchange rate.
    */
-  close(redemptionPayment: Fraction, currencyExchangeRate: Fraction, transaction: string): void {
+  close(redemptionPayment: Fraction, currencyExchangeRate: Fraction, transaction: string, closeDate: string): void {
     this._redemptionPayment = redemptionPayment;
     this._redemptionCurrencyConversionRate = currencyExchangeRate;
     this._transaction = transaction;
+    this._closeDate = closeDate;
     this._status = 'closed';
   }
 
@@ -118,13 +123,13 @@ export class PaymentUnit {
   }
 
   /**
-   * Key for grouping closed transactions: [fundName, register, transaction].
+   * Key for grouping closed transactions: [fundName, register, transaction, closeDate].
    */
-  get closeKey(): { fundName: string; register: string; transaction: string } {
-    if (this._status !== 'closed') {
+  get closeKey(): { fundName: string; register: string; transaction: string; closeDate: string } {
+    if (this._status !== 'closed' || !this._closeDate) {
       throw new Error("Can't get closing key when transaction is not yet closed");
     }
-    return { fundName: this._fundName, register: this._register, transaction: this._transaction };
+    return { fundName: this._fundName, register: this._register, transaction: this._transaction, closeDate: this._closeDate };
   }
 
   /**

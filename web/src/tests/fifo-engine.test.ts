@@ -17,10 +17,14 @@ function checkClosedUnit(
   currencyConversionIn: Fraction,
   payment: Fraction,
   currencyConversionOut: Fraction,
+  closeDate?: string,
 ): void {
   expect(closedUnit.key.fundName).toBe(fundName);
   expect(closedUnit.key.register).toBe(register);
   expect(closedUnit.key.transaction).toBe(transaction);
+  if (closeDate !== undefined) {
+    expect(closedUnit.key.closeDate).toBe(closeDate);
+  }
 
   expect(closedUnit.value.costUsd.equals(expectedCostUsd)).toBe(true);
 
@@ -78,7 +82,7 @@ describe('FifoEngine', () => {
 
     const engine = new FifoEngine();
     engine.addPayment(fundName, register, moneyPaidInUsd, feeInUsd, unitsIn, currencyConversionIn, transactionIn);
-    engine.addWithdrawal(fundName, register, moneyPaidOutUsd, feeOutUsd, unitsOut, currencyConversionOut, transactionOut);
+    engine.addWithdrawal(fundName, register, moneyPaidOutUsd, feeOutUsd, unitsOut, currencyConversionOut, transactionOut, '01.01.25');
 
     const closedUnits = engine.closedUnits;
     const remainingUnits = engine.remainingUnits;
@@ -154,7 +158,7 @@ describe('FifoEngine', () => {
     const engine = new FifoEngine();
     engine.addPayment(fundName, register, moneyPaidAUsd, feeAInUsd, unitsAIn, currencyConversionAIn, transactionInA);
     engine.addPayment(fundName, register, moneyPaidBUsd, feeBInUsd, unitsBIn, currencyConversionBIn, transactionInB);
-    engine.addWithdrawal(fundName, register, moneyPaidOutUsd, feeOutUsd, unitsOut, currencyConversionOut, transactionOut);
+    engine.addWithdrawal(fundName, register, moneyPaidOutUsd, feeOutUsd, unitsOut, currencyConversionOut, transactionOut, '01.01.25');
 
     const closedUnits = engine.closedUnits;
     const remainingUnits = engine.remainingUnits;
@@ -237,7 +241,7 @@ describe('FifoEngine', () => {
     engine.addConversion('A', '1', new Fraction(2), 'B', '2', new Fraction(20), new Fraction(0), new Fraction(2), 'transaction 2');
     engine.addConversion('B', '2', new Fraction(15), 'A', '1', new Fraction(1), new Fraction(0), new Fraction(2), 'transaction 3');
     engine.addConversion('B', '2', new Fraction(5), 'A', '1', new Fraction(1), new Fraction(0), new Fraction(2), 'transaction 4');
-    engine.addWithdrawal('A', '1', new Fraction(200), new Fraction(0), new Fraction(10), new Fraction(2), 'transaction out');
+    engine.addWithdrawal('A', '1', new Fraction(200), new Fraction(0), new Fraction(10), new Fraction(2), 'transaction out', '15.03.25');
 
     const closedUnits = engine.closedUnits;
     const remainingUnits = engine.remainingUnits;
@@ -258,7 +262,7 @@ describe('FifoEngine', () => {
     engine.addConversion('A', '1', new Fraction(2), 'B', '1', new Fraction(4), new Fraction(0), new Fraction(2), 'transaction 2');
     engine.addConversion('B', '1', new Fraction(3), 'A', '1', new Fraction(1), new Fraction(0), new Fraction(2), 'transaction 3');
     engine.addConversion('B', '1', new Fraction(1), 'A', '1', new Fraction(1), new Fraction(0), new Fraction(2), 'transaction 4');
-    engine.addWithdrawal('A', '1', new Fraction(200), new Fraction(0), new Fraction(10), new Fraction(2), 'transaction out');
+    engine.addWithdrawal('A', '1', new Fraction(200), new Fraction(0), new Fraction(10), new Fraction(2), 'transaction out', '15.03.25');
 
     const closedUnits = engine.closedUnits;
     const remainingUnits = engine.remainingUnits;
@@ -275,7 +279,7 @@ describe('FifoEngine', () => {
     const engine = new FifoEngine();
     engine.addPayment('A', '1', new Fraction(100), new Fraction(0), new Fraction(10), new Fraction(1), 'tx1');
     expect(() => {
-      engine.addWithdrawal('A', '1', new Fraction(200), new Fraction(0), new Fraction(20), new Fraction(1), 'tx2');
+      engine.addWithdrawal('A', '1', new Fraction(200), new Fraction(0), new Fraction(20), new Fraction(1), 'tx2', '01.01.25');
     }).toThrow("Can't adjust units");
   });
 
@@ -293,7 +297,7 @@ describe('FifoEngine', () => {
     const engine = new FifoEngine();
     engine.addPayment('A', '1', new Fraction(100), new Fraction(0), new Fraction(10), new Fraction(1), 'tx1');
     engine.addPayment('A', '1', new Fraction(200), new Fraction(0), new Fraction(20), new Fraction(2), 'tx2');
-    engine.addWithdrawal('A', '1', new Fraction(300), new Fraction(0), new Fraction(30), new Fraction(3), 'tx3');
+    engine.addWithdrawal('A', '1', new Fraction(300), new Fraction(0), new Fraction(30), new Fraction(3), 'tx3', '10.06.25');
 
     const closedTx = engine.closedTransactions;
     expect(closedTx.size).toBe(1);
@@ -312,5 +316,40 @@ describe('FifoEngine', () => {
     expect(entry.value.paymentPln.equals(new Fraction(900))).toBe(true);
     // Units: 30
     expect(entry.value.units.equals(new Fraction(30))).toBe(true);
+    // CloseDate
+    expect(entry.key.closeDate).toBe('10.06.25');
+  });
+
+  it('closed transactions have correct closeDate across different years', () => {
+    const engine = new FifoEngine();
+    // Fund A sold in 2024
+    engine.addPayment('A', '1', new Fraction(100), new Fraction(0), new Fraction(10), new Fraction(1), 'buy-a');
+    engine.addWithdrawal('A', '1', new Fraction(150), new Fraction(0), new Fraction(10), new Fraction(3), 'sell-a', '15.06.24');
+
+    // Fund B sold in 2025
+    engine.addPayment('B', '2', new Fraction(200), new Fraction(0), new Fraction(20), new Fraction(2), 'buy-b');
+    engine.addWithdrawal('B', '2', new Fraction(300), new Fraction(0), new Fraction(20), new Fraction(3), 'sell-b', '10.03.25');
+
+    const closedTx = engine.closedTransactions;
+    expect(closedTx.size).toBe(2);
+
+    const entries = [...closedTx.values()];
+    const sellA = entries.find(e => e.key.transaction === 'sell-a');
+    const sellB = entries.find(e => e.key.transaction === 'sell-b');
+
+    expect(sellA).toBeDefined();
+    expect(sellB).toBeDefined();
+    expect(sellA!.key.closeDate).toBe('15.06.24');
+    expect(sellB!.key.closeDate).toBe('10.03.25');
+
+    // Fund A: cost=100, payment=150
+    expect(sellA!.value.costUsd.equals(new Fraction(100))).toBe(true);
+    expect(sellA!.value.paymentUsd.equals(new Fraction(150))).toBe(true);
+    expect(sellA!.value.units.equals(new Fraction(10))).toBe(true);
+
+    // Fund B: cost=200, payment=300
+    expect(sellB!.value.costUsd.equals(new Fraction(200))).toBe(true);
+    expect(sellB!.value.paymentUsd.equals(new Fraction(300))).toBe(true);
+    expect(sellB!.value.units.equals(new Fraction(20))).toBe(true);
   });
 });

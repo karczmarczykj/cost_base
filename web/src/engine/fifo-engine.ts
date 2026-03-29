@@ -163,6 +163,7 @@ export class FifoEngine {
     units: Fraction,
     currencyConversionRate: Fraction,
     transactionNumber: string,
+    date: string,
   ): void {
     if (units.compare(0) <= 0 || outPayment.compare(0) <= 0 || currencyConversionRate.compare(0) <= 0) {
       throw new Error('Units, outPayment, and currencyConversionRate must be positive');
@@ -174,7 +175,7 @@ export class FifoEngine {
       const currentUnits = payment.units;
       // Proportional payment: (outPayment * currentUnits) / totalUnits
       const proportionalPayment = outPayment.mul(currentUnits).div(units);
-      payment.close(proportionalPayment, currencyConversionRate, transactionNumber);
+      payment.close(proportionalPayment, currencyConversionRate, transactionNumber, date);
     }
   }
 
@@ -189,7 +190,7 @@ export class FifoEngine {
         const ck = payment.closeKey;
         const cv = payment.closeValue;
         result.push({
-          key: { fundName: ck.fundName, register: ck.register, transaction: ck.transaction },
+          key: { fundName: ck.fundName, register: ck.register, transaction: ck.transaction, closeDate: ck.closeDate },
           value: {
             costUsd: cv.cost,
             costPln: cv.costInLocalCurrency,

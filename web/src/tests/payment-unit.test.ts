@@ -101,12 +101,13 @@ describe('PaymentUnit', () => {
 
   it('should return close key after closing', () => {
     const unit = createPrimaryUnit();
-    unit.close(new Fraction(100), new Fraction(3), '2-1');
+    unit.close(new Fraction(100), new Fraction(3), '2-1', '15.06.24');
 
-    const { fundName, register, transaction } = unit.closeKey;
+    const { fundName, register, transaction, closeDate } = unit.closeKey;
     expect(fundName).toBe(primaryParams.fund);
     expect(register).toBe(primaryParams.register);
     expect(transaction).toBe('2-1');
+    expect(closeDate).toBe('15.06.24');
     expect(unit.isClosed).toBe(true);
   });
 
@@ -114,7 +115,7 @@ describe('PaymentUnit', () => {
     const unit = createPrimaryUnit();
     const givenPayment = new Fraction(100);
     const currencyExchangeRate = new Fraction(3);
-    unit.close(givenPayment, currencyExchangeRate, '2-1');
+    unit.close(givenPayment, currencyExchangeRate, '2-1', '15.06.24');
 
     const { cost, costInLocalCurrency, payment, paymentInLocalCurrency, units } = unit.closeValue;
     expect(cost.equals(new Fraction(primaryParams.cost))).toBe(true);
