@@ -160,7 +160,7 @@ export function createTransactionInput(
           ${ICON_CHEVRON}
         </div>
       </div>
-      <div class="collapsible-body" id="txlist-body">
+      <div class="collapsible-body collapsible-body--tall" id="txlist-body">
         <div id="transactions-list"></div>
       </div>
     </div>
@@ -394,7 +394,7 @@ export function createTransactionInput(
     }
 
     let html = `
-      <div class="table-wrapper">
+      <div class="table-wrapper table-wrapper--scroll">
         <table class="data-table" role="grid">
           <thead>
             <tr>

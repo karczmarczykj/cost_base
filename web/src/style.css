@@ -627,6 +627,13 @@ legend {
   border: 1px solid var(--border);
 }
 
+/* Scrollable wrapper for long tables — keeps the sticky thead visible
+   while the tbody scrolls. Used by the transactions list. */
+.table-wrapper--scroll {
+  max-height: min(65vh, 720px);
+  overflow-y: auto;
+}
+
 .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -807,6 +814,19 @@ legend {
   max-height: 1200px;
   opacity: 1;
   padding-top: 1rem;
+}
+
+/* Variant used for long lists (e.g. transactions) where the 1200px clamp
+   would hide rows and the outer `overflow: hidden` would block scrolling.
+   Opens immediately without slide animation; the inner scroll container
+   (`.table-wrapper--scroll`) handles large content. */
+.collapsible-body--tall {
+  transition: opacity 0.25s ease;
+}
+
+.collapsible-body--tall.open {
+  max-height: none;
+  overflow: visible;
 }
 
 /* ------------------------------------------------------------
