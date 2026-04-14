@@ -320,6 +320,38 @@ describe('FifoEngine', () => {
     expect(entry.key.closeDate).toBe('10.06.25');
   });
 
+  it('conversion after partial sell does not consume closed units', () => {
+    // Regression: after a partial sell, closed PaymentUnits are re-inserted
+    // at the head of the FIFO list. A subsequent conversion must skip them
+    // and drain open units instead — otherwise open units get stuck forever.
+    const engine = new FifoEngine();
+
+    // Two buys: 10 units @ $100, 10 units @ $200
+    engine.addPayment('A', '1', new Fraction(100), new Fraction(0), new Fraction(10), new Fraction(1), 'buy-1');
+    engine.addPayment('A', '1', new Fraction(200), new Fraction(0), new Fraction(10), new Fraction(1), 'buy-2');
+
+    // Partial sell: 5 units (splits buy-1, closes the 5-unit chunk)
+    engine.addWithdrawal('A', '1', new Fraction(60), new Fraction(0), new Fraction(5), new Fraction(1), 'sell', '01.06.25');
+
+    // Remaining open: 5 (from buy-1) + 10 (from buy-2) = 15 units.
+    // Convert all 15 to fund B.
+    engine.addConversion(
+      'A', '1', new Fraction(15),
+      'B', '2', new Fraction(30),
+      new Fraction(0), new Fraction(1), 'conv',
+    );
+
+    // Fund A must be fully drained (closed units stay in the list but
+    // aren't counted as remaining).
+    const remaining = engine.remainingFunds;
+    const a = [...remaining.values()].find(e => e.key.fundName === 'A');
+    expect(a).toBeUndefined();
+
+    const b = [...remaining.values()].find(e => e.key.fundName === 'B');
+    expect(b).toBeDefined();
+    expect(b!.value.units.equals(new Fraction(30))).toBe(true);
+  });
+
   it('closed transactions have correct closeDate across different years', () => {
     const engine = new FifoEngine();
     // Fund A sold in 2024

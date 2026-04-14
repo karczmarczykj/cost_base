@@ -4,4 +4,7 @@ __pycache__/
 *.pyc
 .claude/
 Mirek
+large-transactions
 web/src/tests/mirek-debug.test.ts
+web/src/tests/large-transactions-close-all.test.ts
+web/src/tests/trace-100021571.test.ts

@@ -58,21 +58,27 @@ export class FifoEngine {
     let remainingUnits = units;
     const paymentList = this.getPaymentList(fundName, register);
     const collected: PaymentUnit[] = [];
+    // Closed payments sit at the front of the list (a sell re-inserts them
+    // after close()). FIFO must iterate only open payments, so we pull closed
+    // ones aside and restore them to the front afterwards.
+    const skippedClosed: PaymentUnit[] = [];
 
     while (remainingUnits.compare(0) > 0) {
       if (paymentList.length === 0) break;
 
-      const payment = paymentList.shift()!; // popleft
+      const payment = paymentList.shift()!;
+
+      if (payment.isClosed) {
+        skippedClosed.push(payment);
+        continue;
+      }
 
       if (payment.units.compare(remainingUnits) <= 0) {
-        // This payment is fully consumed
         collected.push(payment);
         remainingUnits = remainingUnits.sub(payment.units);
       } else {
-        // Partial consumption: split the payment
         const splitRatio = remainingUnits.div(payment.units);
         collected.push(payment.scale(splitRatio));
-        // Put the remainder back at the front
         payment.scaleInPlace(new Fraction(1).sub(splitRatio));
         paymentList.unshift(payment);
         remainingUnits = new Fraction(0);
@@ -80,18 +86,17 @@ export class FifoEngine {
     }
 
     if (remainingUnits.compare(0) > 0) {
+      for (const unit of [...skippedClosed].reverse()) paymentList.unshift(unit);
       throw new Error(
         `Can't adjust units (remaining units = ${remainingUnits.valueOf()}, fund name = ${fundName}, register = ${register})`,
       );
     }
 
     if (!removeElements) {
-      // Put collected units back at the front (in original order)
-      const reversed = [...collected].reverse();
-      for (const unit of reversed) {
-        paymentList.unshift(unit);
-      }
+      for (const unit of [...collected].reverse()) paymentList.unshift(unit);
     }
+
+    for (const unit of [...skippedClosed].reverse()) paymentList.unshift(unit);
 
     return collected;
   }
